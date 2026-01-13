@@ -1,0 +1,40 @@
+{{define "content"}}
+<div class="max-w-7xl mx-auto px-6 py-20 flex flex-col items-center justify-center min-h-[600px]">
+    <div class="max-w-xl w-full text-center">
+        {{if .Content}}
+        {{.Content}}
+        {{else}}
+        <h2 class="text-5xl font-semibold tracking-tighter mb-6 uppercase">Let's build something simple.</h2>
+        <p class="text-lg font-light text-[#666] mb-12 italic">Currently open for strategic collaborations and AI-driven
+            architecture.</p>
+
+        <form action="https://formspree.io/f/xgvgjbqv" method="POST"
+            class="text-left bg-white p-12 border border-[#E5E5E5] shadow-sm space-y-8">
+            <div>
+                <label class="block font-mono text-[10px] uppercase text-[#888] mb-2 tracking-[0.2em]">Identifier
+                    (Name)</label>
+                <input type="text" name="name"
+                    class="w-full border-b border-[#E5E5E5] py-3 focus:outline-none focus:border-[#2D2D2D] transition-colors bg-transparent text-[#111]"
+                    placeholder="Your Name" required />
+            </div>
+            <div>
+                <label class="block font-mono text-[10px] uppercase text-[#888] mb-2 tracking-[0.2em]">Comms
+                    (Email)</label>
+                <input type="email" name="email"
+                    class="w-full border-b border-[#E5E5E5] py-3 focus:outline-none focus:border-[#2D2D2D] transition-colors bg-transparent text-[#111]"
+                    placeholder="your@email.com" required />
+            </div>
+            <div>
+                <label class="block font-mono text-[10px] uppercase text-[#888] mb-2 tracking-[0.2em]">Protocol
+                    (Message)</label>
+                <textarea name="message" rows="4"
+                    class="w-full border-b border-[#E5E5E5] py-3 focus:outline-none focus:border-[#2D2D2D] transition-colors resize-none bg-transparent text-[#111]"
+                    placeholder="Tell me about your project..." required></textarea>
+            </div>
+            <button type="submit" class="w-full btn-primary py-5 font-bold tracking-[0.3em]">
+                Send_Protocol_Transmission
+            </button>
+        </form>
+        {{end}}
+    </div>
+    {{end}}

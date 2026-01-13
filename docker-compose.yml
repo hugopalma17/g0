@@ -1,0 +1,17 @@
+# G0 CMS - Docker Compose
+# Usage: docker-compose up -d
+
+services:
+  g0:
+    build: .
+    container_name: g0-cms
+    ports:
+      - "8080:8080"
+    volumes:
+      # Persist database
+      - ./data:/app/data
+      # Mount config (create config.yaml first via setup wizard or manually)
+      - ./config.yaml:/app/config.yaml:ro
+    restart: unless-stopped
+    environment:
+      - TZ=UTC

@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AGENCY.DB // CONTROL_NODE</title>
+    <link href="/static/css/prism.css" rel="stylesheet" />
+    <script src="/static/js/htmx.min.js"></script>
+    <script src="/static/js/chart.min.js"></script>
+    <script src="/static/js/prism.js"></script>
+
+    <link rel="stylesheet" href="/static/css/xterm.min.css">
+    <link rel="stylesheet" href="/static/css/all.min.css">
+    <!-- Analytics placeholder -->
+    <style>
+        /* --- RESET & VARIABLES --- */
+        :root {
+            --bg: #050505;
+            --panel: #111;
+            --border: #333;
+            --text-main: #e0e0e0;
+            --text-mute: #777;
+            --accent: #00ff41;
+            /* Hacker Green */
+            --danger: #ff3333;
+            --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            --font-mono: "Menlo", "Consolas", "Monaco", monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg);
+            color: var(--text-main);
+            font-family: var(--font-ui);
+            font-size: 13px;
+            height: 100vh;
+            /* Viewport height */
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            /* Prevent body scroll, use inner containers */
+        }
+
+        /* --- LAYOUT --- */
+        header {
+            height: 50px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+            flex-shrink: 0;
+        }
+
+        .logo {
+            font-weight: bold;
+            font-size: 16px;
+            letter-spacing: -0.5px;
+        }
+
+        .logo span {
+            color: var(--accent);
+        }
+
+        .badge {
+            background: var(--border);
+            padding: 2px 6px;
+            font-size: 10px;
+            border-radius: 4px;
+            margin-left: 10px;
+            font-family: var(--font-mono);
+            color: var(--accent);
+        }
+
+        .top-nav a {
+            color: var(--text-mute);
+            text-decoration: none;
+            margin-left: 15px;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+
+        .top-nav a:hover {
+            color: var(--accent);
+        }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            /* Lock container */
+        }
+
+        /* --- SIDEBAR --- */
+        .sidebar {
+            width: 60px;
+            background: var(--bg);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 20px;
+            flex-shrink: 0;
+        }
+
+        .nav-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-mute);
+            font-size: 20px;
+            cursor: pointer;
+            margin-bottom: 25px;
+            transition: color 0.2s;
+            position: relative;
+        }
+
+        .nav-btn:hover,
+        .nav-btn.active {
+            color: var(--accent);
+        }
+
+        /* Tooltip hack */
+        .nav-btn::after {
+            content: attr(data-title);
+            position: absolute;
+            left: 50px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            padding: 4px 8px;
+            font-size: 10px;
+            white-space: nowrap;
+            color: var(--text-main);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            z-index: 100;
+        }
+
+        .nav-btn:hover::after {
+            opacity: 1;
+        }
+
+        /* --- VIEWPORT AREAS --- */
+        .viewport {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+        }
+
+        .view-section {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: none;
+            /* JS toggles this */
+            flex-direction: column;
+            background: var(--bg);
+        }
+
+        .view-section.active {
+            display: flex;
+        }
+
+        /* --- EDITOR LAYOUT --- */
+        .editor-layout {
+            display: flex;
+            height: 100%;
+        }
+
+        .list-col {
+            width: 250px;
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            background: var(--bg);
+        }
+
+        .list-header {
+            padding: 10px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--panel);
+        }
+
+        .btn-new {
+            background: none;
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            font-size: 10px;
+            cursor: pointer;
+            padding: 2px 5px;
+        }
+
+        .list-scroll {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .list-item {
+            padding: 10px;
+            border-bottom: 1px solid #222;
+            cursor: pointer;
+        }
+
+        .list-item:hover {
+            background: #111;
+        }
+
+        .list-item h4 {
+            margin: 0 0 5px 0;
+            font-size: 12px;
+            color: var(--text-main);
+        }
+
+        .list-item span {
+            font-size: 10px;
+            color: var(--text-mute);
+            font-family: var(--font-mono);
+        }
+
+        .tag {
+            background: #222;
+            padding: 1px 4px;
+            border-radius: 2px;
+            margin-right: 5px;
+        }
+
+        .work-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .controls-bar {
+            padding: 10px;
+            border-bottom: 1px solid var(--border);
+            background: var(--panel);
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 10px;
+            align-items: end;
+        }
+
+        /* Inputs */
+        label {
+            display: block;
+            font-size: 10px;
+            color: var(--text-mute);
+            margin-bottom: 4px;
+            font-family: var(--font-mono);
+            text-transform: uppercase;
+        }
+
+        input,
+        select {
+            width: 100%;
+            background: #000;
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 6px;
+            font-family: var(--font-mono);
+            font-size: 11px;
+        }
+
+        input:focus,
+        select:focus {
+            border-color: var(--accent);
+            outline: none;
+        }
+
+        .btn-save {
+            background: var(--accent);
+            color: #000;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            padding: 7px;
+            text-transform: uppercase;
+            width: 100%;
+        }
+
+        .btn-save:hover {
+            opacity: 0.9;
+        }
+
+        .btn-del {
+            background: transparent;
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            cursor: pointer;
+            padding: 7px;
+            width: 100%;
+        }
+
+        /* RAW EDITOR SPLIT */
+        .split-view {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .raw-container,
+        .preview-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .raw-container {
+            border-right: 1px solid var(--border);
+        }
+
+        textarea#raw-injector {
+            flex: 1;
+            background: #080808;
+            color: #0f0;
+            border: none;
+            padding: 15px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            line-height: 1.5;
+            resize: none;
+            outline: none;
+        }
+
+        #live-preview {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #fff;
+            /* Preview is light by default to mimic normie view, or make dark if you prefer */
+            color: #000;
+        }
+
+        /* Optional: Dark mode preview if you prefer */
+        #live-preview.dark-preview {
+            background: #0e0e0e;
+            color: #ddd;
+        }
+
+        .label-overlay {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--border);
+            color: #aaa;
+            font-size: 9px;
+            padding: 2px 6px;
+            font-family: var(--font-mono);
+            pointer-events: none;
+        }
+
+        /* --- MATRIX TABLE --- */
+        .matrix-toolbar {
+            padding: 10px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 10px;
+            background: var(--panel);
+        }
+
+        .matrix-scroll {
+            flex: 1;
+            overflow: auto;
+            background: #000;
+        }
+
+        table.matrix {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: var(--font-mono);
+            font-size: 11px;
+        }
+
+        table.matrix th {
+            text-align: left;
+            background: #1a1a1a;
+            color: #888;
+            padding: 8px;
+            position: sticky;
+            top: 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        table.matrix td {
+            border-bottom: 1px solid #222;
+            border-right: 1px solid #222;
+            padding: 6px;
+            color: #ccc;
+            white-space: nowrap;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: cell;
+            word-break: break-all;
+        }
+
+        /* Truncate long content in database viewer */
+        table.matrix td {
+            position: relative;
+        }
+
+        table.matrix td[title] {
+            cursor: help;
+        }
+
+        table.matrix td:hover {
+            color: var(--accent);
+            background: #111;
+        }
+
+        table.matrix td.editing {
+            padding: 0;
+        }
+
+        table.matrix input,
+        table.matrix textarea {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: #222;
+            color: #fff;
+            outline: 1px solid var(--accent);
+        }
+
+        /* --- TERMINAL --- */
+        #terminal-container {
+            flex: 1;
+            background: #000;
+            padding: 10px;
+        }
+
+        /* --- CUSTOM EDITOR TOOLBAR --- */
+        .editor-toolbar-custom {
+            background: var(--panel);
+            border-bottom: 1px solid var(--border);
+            padding: 8px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .toolbar-group {
+            display: flex;
+            gap: 5px;
+            padding-right: 15px;
+            border-right: 1px solid var(--border);
+        }
+
+        .toolbar-group:last-child {
+            border-right: none;
+        }
+
+        .toolbar-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-mute);
+            padding: 6px 10px;
+            cursor: pointer;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            transition: all 0.2s;
+        }
+
+        .toolbar-btn:hover {
+            background: var(--border);
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .toolbar-btn i {
+            font-size: 13px;
+        }
+
+        /* --- UTILS --- */
+        .g-col-1 {
+            grid-column: span 1;
+        }
+
+        .g-col-2 {
+            grid-column: span 2;
+        }
+
+        .g-col-3 {
+            grid-column: span 3;
+        }
+
+        .g-col-4 {
+            grid-column: span 4;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <div class="logo">AGENCY<span>.DB</span> <span class="badge">CONTROL_NODE</span></div>
+        <div class="top-nav">
+            <span id="system-status" style="color:var(--text-mute)">SYSTEM_ACTIVE</span>
+            <a href="/">[EXIT_TO_SITE]</a>
+            <a href="/api/auth/logout" style="color:var(--danger)">[LOGOUT]</a>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <button class="nav-btn active" onclick="switchTab('editor')" id="nav-editor" data-title="Raw Injector">
+                <i class="fa-solid fa-code"></i>
+            </button>
+            <button class="nav-btn" onclick="switchTab('database')" id="nav-database" data-title="Database Matrix">
+                <i class="fa-solid fa-database"></i>
+            </button>
+            <button class="nav-btn" onclick="switchTab('terminal')" id="nav-terminal" data-title="System Shell">
+                <i class="fa-solid fa-terminal"></i>
+            </button>
+        </div>
+
+        <div class="viewport">
+
+            <div id="section-editor" class="view-section active">
+                <div class="editor-layout">
+                    <div class="list-col">
+                        <div class="list-header">
+                            <span style="font-family:var(--font-mono); font-size:10px;">PROTOCOL_ARCHIVE</span>
+                            <button class="btn-new" onclick="loadEntry(null)">[NEW]</button>
+                        </div>
+                        <div class="list-scroll">
+                            {{range .Posts}}
+                            <div class="list-item" onclick="loadEntry({{.ID}})">
+                                <h4>{{.Title}}</h4>
+                                <span class="tag">{{.Type}}</span> <span>{{.Date}}</span>
+                            </div>
+                            {{end}}
+                        </div>
+                    </div>
+
+                    <div class="work-col">
+                        <div class="controls-bar">
+                            <input type="hidden" id="entry-id">
+
+                            <div class="g-col-2">
+                                <label>Type</label>
+                                <select id="entry-type">
+                                    <option value="blog">Journal</option>
+                                    <option value="breakdown">Breakdown</option>
+                                    <option value="home">Home Page</option>
+                                    <option value="resume">Resume</option>
+                                    <option value="job_page">Job Template</option>
+                                </select>
+                            </div>
+
+                            <div class="g-col-3">
+                                <label>Title / Slug</label>
+                                <input type="text" id="entry-title" placeholder="Protocol Title...">
+                            </div>
+
+                            <div class="g-col-2">
+                                <label>Date</label>
+                                <input type="text" id="entry-date" placeholder="YYYY-MM-DD">
+                            </div>
+
+                            <div class="g-col-3">
+                                <label>Metadata (JSON)</label>
+                                <input type="text" id="entry-meta" placeholder='{"title": "SEO", "og_image": "..."}'>
+                            </div>
+
+                            <div class="g-col-1">
+                                <button class="btn-save" onclick="saveEntry()">Inject</button>
+                            </div>
+                            <div class="g-col-1">
+                                <button class="btn-del" onclick="deleteEntry()"><i
+                                        class="fa-solid fa-trash"></i></button>
+                            </div>
+                            <div class="g-col-1">
+                                <button class="btn-new" onclick="generateMetadata()"
+                                    title="Generate SEO metadata with Gemini AI">
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i> AI Meta
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="split-view">
+                            <div class="raw-container">
+                                <span class="label-overlay">SOURCE_INPUT</span>
+                                <textarea id="raw-injector" spellcheck="false" placeholder=""></textarea>
+                            </div>
+                            <div class="preview-container">
+                                <span class="label-overlay">LIVE_RENDER</span>
+                                <div id="live-preview"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="section-database" class="view-section">
+                <div class="matrix-toolbar">
+                    <select id="db-table-select" onchange="loadTable()" style="width:150px">
+                        <option value="content">TABLE: CONTENT</option>
+                    </select>
+                    <input type="text" id="db-query-input" placeholder="SQL Filter (e.g. LIMIT 50)" style="width:250px"
+                        onkeydown="if(event.key==='Enter') loadTable()">
+                    <button class="btn-new" onclick="loadTable()">REFRESH</button>
+                    <span id="db-status"
+                        style="margin-left:auto; font-family:var(--font-mono); color:var(--text-mute)">IDLE</span>
+                </div>
+                <div class="matrix-scroll">
+                    <table class="matrix" id="matrix-grid">
+                        <thead id="matrix-head"></thead>
+                        <tbody id="matrix-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="section-terminal" class="view-section">
+                <div id="terminal-container"></div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="/static/js/chart.min.js"></script>
+    <script src="/static/js/xterm.min.js"></script>
+    <script src="/static/js/xterm-addon-fit.min.js"></script>
+    <script src="/static/js/xterm-addon-web-links.min.js"></script>
+    <script src="/static/js/custom-editor.js"></script>
+    <script src="/static/js/admin.js"></script>
+
+    <script>
+        window.postsData = {{.PostsJS }};
+        window.terminal = null;
+        window.socket = null;
+        window.fitAddon = null;
+    </script>
+</body>
+
+</html>

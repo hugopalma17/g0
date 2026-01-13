@@ -1,0 +1,26 @@
+# Binary
+g0
+antigravity
+
+# Config (contains secrets)
+config.yaml
+
+# Database
+data/
+*.db
+
+# Dev notes
+.history
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log

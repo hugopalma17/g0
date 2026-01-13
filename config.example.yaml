@@ -1,0 +1,41 @@
+# G0 CMS Configuration
+# Copy this to data/config.yaml and fill in your values
+# OR just run ./g0 and use the setup wizard
+#
+# All persistent data is stored in ./data/ folder:
+#   - data/config.yaml  (this file)
+#   - data/g0.db        (SQLite database)
+
+site:
+  name: "My Site"
+  url: "https://example.com"           # Your domain (no trailing slash)
+  tagline: "A lightweight CMS"
+  description: "My personal website"
+  author: "Your Name"
+
+database:
+  driver: "sqlite"                      # "sqlite" or "postgres"
+  
+  # SQLite settings (if driver: sqlite)
+  path: "./data/g0.db"
+  
+  # PostgreSQL settings (if driver: postgres)
+  # host: "localhost"
+  # port: "5432"
+  # user: "postgres"
+  # password: "your-password"
+  # dbname: "g0cms"
+
+auth:
+  provider: "google"
+  client_id: "xxxx.apps.googleusercontent.com"      # From Google Cloud Console
+  client_secret: "GOCSPX-xxxx"                      # From Google Cloud Console
+  redirect_url: "https://example.com/api/auth/callback"  # Must match Google Console
+  allowed_emails:
+    - "you@gmail.com"                   # Email(s) allowed to access admin
+  session_key: ""                       # Auto-generated if empty
+
+server:
+  host: "0.0.0.0"                       # Listen on all interfaces
+  port: "8080"                          # HTTP port
+  admin_path: "/admin"                  # Custom admin panel URL (e.g., /admin, /dashboard, /control)

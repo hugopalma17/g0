@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>
+    {{if .Title}}{{.Title}}{{else}}My Site{{end}}
+  </title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  {{if .SeoDesc}}
+  <meta name="description" content="{{.SeoDesc}}" />
+  {{end}} {{if .SeoKeywords}}
+  <meta name="keywords" content="{{.SeoKeywords}}" />
+  {{end}}
+  <meta property="og:title" content="{{if .Title}}{{.Title}}{{else}}My Site{{end}}" />
+  <meta property="og:description" content="{{if .SeoDesc}}{{.SeoDesc}}{{end}}" />
+  {{if .SeoImage}}
+  <meta property="og:image" content="{{.SeoImage}}" />
+  {{end}}
+  <link href="/static/css/output.css" rel="stylesheet" />
+  <link href="/static/css/fonts.css" rel="stylesheet" />
+  <link href="/static/css/theme.css?v=2" rel="stylesheet" />
+  <link href="/static/css/prism.css" rel="stylesheet" />
+  <script src="/static/js/htmx.min.js"></script>
+  <script src="/static/js/chart.min.js"></script>
+  <script src="/static/js/prism.js"></script>
+  <!-- Analytics script placeholder - add your own tracking here -->
+  <style>
+    body {
+      font-family: "Inter", sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+    }
+
+    .font-mono {
+      font-family: "JetBrains Mono", monospace;
+    }
+
+    .fade-in {
+      animation: fadeIn 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(40px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .active-nav {
+      border-bottom: 2px solid var(--accent);
+      font-weight: 500;
+      color: var(--text-primary) !important;
+    }
+
+    .architect-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      padding: 2.5rem;
+      transition: all 0.3s ease;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--accent-contrast);
+      padding: 0.75rem 1.5rem;
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border: 1px solid var(--accent);
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .btn-primary:hover {
+      background: transparent;
+      color: var(--accent);
+    }
+
+    details summary {
+      list-style: none;
+      cursor: pointer;
+      outline: none;
+    }
+
+    details summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .sidebar-link:hover {
+      background-color: var(--sidebar-hover);
+    }
+
+    .sidebar-link.active {
+      background-color: var(--sidebar-active);
+      border-left: 4px solid var(--accent);
+      font-weight: 500;
+    }
+
+    #theme-toggle {
+      background: transparent;
+      border: 1px solid var(--border-primary);
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 4px 8px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      transition: all 0.2s;
+    }
+
+    #theme-toggle:hover {
+      border-color: var(--accent);
+      color: var(--text-primary);
+    }
+
+    /* Force wrapping in code blocks */
+    .prose pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      overflow-x: hidden;
+    }
+
+    .prose code {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    /* Manual fix for detail arrow rotation if Tailwind variant is missing */
+    details[open] summary svg {
+      transform: rotate(90deg);
+    }
+
+    details summary svg {
+      transition: transform 0.2s ease;
+    }
+  </style>
+  <script>
+    function setTheme(theme) {
+      document.documentElement.setAttribute("data-theme", theme);
+      localStorage.setItem("theme", theme);
+      document.cookie = `theme=${theme}; path=/; max-age=31536000`;
+
+      // Update both desktop and mobile theme icons
+      const iconPairs = [
+        ["sun-icon", "moon-icon"],
+        ["mobile-sun-icon", "mobile-moon-icon"]
+      ];
+
+      iconPairs.forEach(([sunId, moonId]) => {
+        const sunIcon = document.getElementById(sunId);
+        const moonIcon = document.getElementById(moonId);
+        if (sunIcon && moonIcon) {
+          if (theme === "dark") {
+            sunIcon.style.opacity = "0.3";
+            moonIcon.style.opacity = "1";
+            moonIcon.classList.add("text-[var(--accent)]");
+            sunIcon.classList.remove("text-[var(--accent)]");
+          } else {
+            sunIcon.style.opacity = "1";
+            moonIcon.style.opacity = "0.3";
+            sunIcon.classList.add("text-[var(--accent)]");
+            moonIcon.classList.remove("text-[var(--accent)]");
+          }
+        }
+      });
+
+      // Only re-render on theme toggle (not initial load)
+      // app._initialized is set after first render in window.onload
+      if (
+        window.app &&
+        window.app._initialized &&
+        window.app.state &&
+        window.app.state.view === "journal"
+      ) {
+        window.app.render();
+        // Notify charts to update colors
+        setTimeout(
+          () => document.dispatchEvent(new Event("themeChanged")),
+          100
+        );
+      }
+    }
+
+    function toggleTheme() {
+      const current =
+        document.documentElement.getAttribute("data-theme") || "dark";
+      setTheme(current === "light" ? "dark" : "light");
+    }
+
+    const serverTheme = "{{.Theme}}" || "dark";
+    document.documentElement.setAttribute("data-theme", serverTheme);
+  </script>
+</head>
+
+<body class="border-t-4 border-[var(--accent)]">
+  <header
+    class="w-full max-w-7xl mx-auto px-6 py-12 flex flex-col md:flex-row justify-between items-baseline border-b border-[var(--border-primary)]">
+    <div class="flex items-center justify-between w-full md:w-auto">
+      <h1 class="text-2xl font-semibold tracking-tight cursor-pointer text-[var(--text-primary)]"
+        onclick="app.router('home')">
+        my site<span class="text-[var(--text-secondary)] font-light">.cms</span>
+      </h1>
+      <!-- Mobile theme toggle -->
+      <button id="mobile-theme-toggle" onclick="toggleTheme()"
+        class="md:hidden flex items-center gap-2 p-2 text-[var(--text-secondary)]">
+        <span id="mobile-sun-icon" class="transition-opacity">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 3v1m0 18v1m9-11h1M3 12h1m15.364-6.364l.707-.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z">
+            </path>
+          </svg>
+        </span>
+        <span id="mobile-moon-icon" class="transition-opacity">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+          </svg>
+        </span>
+      </button>
+    </div>
+    <!-- Desktop nav - hidden on mobile -->
+    <nav class="hidden md:block">
+      <ul
+        class="flex items-center space-x-8 text-xs uppercase tracking-widest font-mono text-[var(--text-secondary)] list-none p-0 m-0">
+        <li>
+          <button id="nav-home"
+            class="hover:text-[var(--text-primary)] pb-1 transition-colors border-none bg-transparent cursor-pointer font-mono uppercase text-[var(--text-secondary)] flex items-center"
+            onclick="app.router('home')">
+            Home
+          </button>
+        </li>
+        <li>
+          <a id="nav-journal" href="/journal"
+            class="inline-flex items-center hover:text-[var(--text-primary)] pb-1 transition-colors font-mono uppercase no-underline text-[var(--text-secondary)]">Journal</a>
+        </li>
+        <li>
+          <button id="nav-resume"
+            class="hover:text-[var(--text-primary)] pb-1 transition-colors border-none bg-transparent cursor-pointer font-mono uppercase text-[var(--text-secondary)] flex items-center"
+            onclick="app.router('resume')">
+            Resume
+          </button>
+        </li>
+        <li>
+          <button id="nav-contact"
+            class="hover:text-[var(--text-primary)] pb-1 transition-colors border-none bg-transparent cursor-pointer font-mono uppercase text-[var(--text-secondary)] flex items-center"
+            onclick="app.router('contact')">
+            Contact
+          </button>
+        </li>
+        <li class="pl-4 border-l border-[var(--border-primary)]">
+          <button id="theme-toggle" onclick="toggleTheme()"
+            class="hover:text-[var(--text-primary)] transition-colors border-none bg-transparent cursor-pointer flex items-center gap-3 p-0">
+            <span id="sun-icon" class="transition-opacity">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 3v1m0 18v1m9-11h1M3 12h1m15.364-6.364l.707-.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z">
+                </path>
+              </svg>
+            </span>
+            <span id="moon-icon" class="transition-opacity">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+              </svg>
+            </span>
+          </button>
+        </li>
+      </ul>
+    </nav>
+  </header>
+
+  <div id="toast"
+    class="fixed bg-slate-800 text-white px-3 py-1.5 rounded shadow-xl text-[10px] tracking-widest uppercase font-mono opacity-0 pointer-events-none transition-all duration-200 z-[100] -translate-x-1/2 -translate-y-full mb-3 scale-95 hidden">
+    Link Copied
+  </div>
+
+  <main id="app-root" class="w-full max-w-7xl mx-auto px-6 py-10 fade-in pb-20">
+    {{block "content" .}}{{end}}
+  </main>
+
+  <footer class="w-full max-w-7xl mx-auto px-6 py-12 border-t border-[var(--border-primary)] mt-auto">
+    <div
+      class="flex flex-col items-center gap-4 text-[10px] font-mono text-[var(--text-secondary)] uppercase tracking-[0.2em]">
+      <div class="flex items-center gap-6">
+        <!-- Social links - edit these URLs in the template -->
+        <a href="#" target="_blank"
+          class="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors" aria-label="GitHub">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path
+              d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.042-1.416-4.042-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 3.513 1.305 4.37 1.001.108-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+          </svg>
+        </a>
+        <a href="#" target="_blank"
+          class="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors" aria-label="LinkedIn">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path
+              d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+          </svg>
+        </a>
+        <a href="#" target="_blank"
+          class="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+          aria-label="Twitter">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path
+              d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+          </svg>
+        </a>
+      </div>
+      <p>&copy; 2025 Your Name | Built with Antigravity.</p>
+      <a href="{{if .AdminPath}}{{.AdminPath}}{{else}}/admin{{end}}"
+        class="hover:text-[var(--text-primary)] transition-colors no-underline border border-[var(--border-primary)] px-2 py-1 rounded mt-2">Admin_Terminal</a>
+    </div>
+  </footer>
+
+  <!-- Mobile Bottom Tab Bar -->
+  <nav id="mobile-tabs"
+    class="fixed bottom-0 left-0 right-0 bg-[var(--bg-secondary)] border-t border-[var(--border-primary)] md:hidden z-50">
+    <ul class="flex justify-around items-center h-14 list-none m-0 p-0">
+      <li>
+        <button id="tab-home" onclick="app.router('home')" class="mobile-tab">
+          <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6">
+            </path>
+          </svg>
+          <span class="text-center">Home</span>
+        </button>
+      </li>
+      <li>
+        <a id="tab-journal" href="/journal" class="mobile-tab">
+          <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253">
+            </path>
+          </svg>
+          <span class="text-center">Journal</span>
+        </a>
+      </li>
+      <li>
+        <button id="tab-resume" onclick="app.router('resume')" class="mobile-tab">
+          <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+            </path>
+          </svg>
+          <span class="text-center">Resume</span>
+        </button>
+      </li>
+      <li>
+        <button id="tab-contact" onclick="app.router('contact')" class="mobile-tab">
+          <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z">
+            </path>
+          </svg>
+          <span class="text-center">Contact</span>
+        </button>
+      </li>
+    </ul>
+  </nav>
+
+  <script>
+    // Data injected from Go SQLite
+    const dbData = {{.Data }};
+    const serverView = "{{.View}}";
+    const serverSlug = "{{.ActiveSlug}}";
+
+    // Expose app globally so setTheme can access it
+    window.app = {
+      state: {
+        view: serverView || 'home',
+        activeSlug: serverSlug || null
+      },
+
+      // Filter helpers
+      getEntries: (type) => dbData.filter(e => e.type === type),
+
+      parseContent: function (c) {
+        return c || ""; // All content is HTML now
+      },
+
+      router: function (viewName, slug = null) {
+        this.state.view = viewName;
+        if (slug) this.state.activeSlug = slug;
+
+        // Update URL
+        let url = '/' + (viewName === 'home' ? '' : viewName);
+        if (viewName === 'journal' && slug) {
+          url += '/' + slug;
+        }
+        history.pushState({ view: viewName, slug: slug }, '', url);
+
+        this.render();
+        this.updateNav();
+        this.updateTitle();
+        this.handleHash();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      },
+
+      handleHash: function () {
+        setTimeout(() => {
+          const hash = window.location.hash;
+          if (hash && hash.startsWith('#breakdown-')) {
+            let el = document.querySelector(hash);
+            if (!el) {
+              // Try searching by data-id
+              el = document.querySelector(`[data-id="${hash.substring(1)}"]`);
+            }
+            if (el && el.tagName === 'DETAILS') {
+              el.open = true;
+              el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          }
+        }, 100);
+      },
+
+      copyLink: function (hash, event) {
+        if (event) event.stopPropagation();
+        const url = window.location.origin + window.location.pathname + '#' + hash;
+        navigator.clipboard.writeText(url).then(() => {
+          const toast = document.getElementById('toast');
+          if (event && event.clientX) {
+            toast.style.left = event.clientX + 'px';
+            toast.style.top = event.clientY + 'px';
+          }
+          toast.classList.remove('hidden');
+          // Force a reflow to ensure the transition happens
+          void toast.offsetWidth;
+          toast.classList.remove('opacity-0', 'scale-95');
+          toast.classList.add('scale-100');
+
+          setTimeout(() => {
+            toast.classList.add('opacity-0', 'scale-95');
+            toast.classList.remove('scale-100');
+            // Hide it completely after transition
+            setTimeout(() => toast.classList.add('hidden'), 200);
+          }, 1000);
+        });
+      },
+
+      // Handle back/forward buttons
+      handlePopState: function (event) {
+        if (event.state) {
+          this.state.view = event.state.view;
+          this.state.activeSlug = event.state.slug;
+          this.render();
+          this.updateNav();
+          this.updateTitle();
+        } else {
+          // Fallback for initial load state if not pushed
+          // Actually, on initial load strictly we might not have state object
+          // But we can reload or parse URL. simpler to just reload or let it be.
+          // Ideally we replaceState on init.
+          window.location.reload();
+        }
+      },
+
+      updateNav: function () {
+        ['home', 'journal', 'resume', 'contact'].forEach(v => {
+          // Desktop nav
+          const el = document.getElementById(`nav-${v}`);
+          if (el) {
+            if (v === this.state.view) el.classList.add('active-nav');
+            else el.classList.remove('active-nav');
+          }
+          // Mobile tabs
+          const tabEl = document.getElementById(`tab-${v}`);
+          if (tabEl) {
+            if (v === this.state.view) tabEl.classList.add('active-tab');
+            else tabEl.classList.remove('active-tab');
+          }
+        });
+      },
+
+      render: function () {
+
+        const root = document.getElementById('app-root');
+        root.innerHTML = '';
+        root.classList.remove('fade-in');
+        void root.offsetWidth;
+        root.classList.add('fade-in');
+
+        switch (this.state.view) {
+          case 'home': this.renderHome(root); break;
+          case 'journal': this.renderJournal(root); break;
+          case 'resume': this.renderResume(root); break;
+          case 'contact': this.renderContact(root); break;
+          default: this.renderHome(root);
+        }
+      },
+
+      renderHome: function (container) {
+        const homeEntry = this.getEntries('home')[0] || { title: "Solutions Architect", content: "Profile Pending..." };
+        const breakdowns = this.getEntries('breakdown');
+
+        container.innerHTML = `
+                  <div class="space-y-32">
+                      <section class="max-w-4xl border-l-4 border-[var(--accent)] pl-8 py-2">
+                          <h1 class="text-5xl md:text-6xl font-semibold tracking-tighter text-[var(--text-primary)] mb-12 leading-none uppercase">${homeEntry.title}</h1>
+                          <div class="prose max-w-none">${this.parseContent(homeEntry.content)}</div>
+                      </section>
+
+                      <section class="space-y-6">
+                          <header class="border-b border-[var(--border-primary)] pb-4">
+                              <h2 class="text-2xl font-light tracking-tight text-[var(--text-primary)] uppercase">Project Breakdowns</h2>
+                          </header>
+                          <div class="divide-y divide-[var(--border-primary)]">
+                              ${breakdowns.map(b => `
+                                  <details id="breakdown-${b.slug}" data-id="breakdown-${b.id}" class="group">
+                                      <summary class="flex items-center justify-between py-4 cursor-pointer focus:outline-none">
+                                          <div class="flex items-center">
+                                              <div class="mr-4 text-[var(--text-secondary)] transition-transform duration-200 group-open:rotate-90">
+                                                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                                              </div>
+                                              <h3 class="text-base font-medium uppercase tracking-tight text-[var(--text-primary)] select-none">${b.title}</h3>
+                                          </div>
+                                          <button onclick="app.copyLink('breakdown-${b.slug}', event)" class="bg-transparent border-none p-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer" title="Copy Deep Link">
+                                              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                                          </button>
+                                      </summary>
+                                      <div class="pb-8 pl-7 prose max-w-none text-sm">${this.parseContent(b.content)}</div>
+                                  </details>
+                              `).join('')}
+                          </div>
+                      </section>
+                  </div>
+              `;
+      },
+
+      renderJournal: function (container) {
+        const blogs = this.getEntries('blog');
+        // Default to first blog if no active slug
+        if (blogs.length > 0 && !this.state.activeSlug) {
+          this.state.activeSlug = blogs[0].slug;
+          // Replace state so URL matches
+          history.replaceState({ view: 'journal', slug: this.state.activeSlug }, '', '/journal/' + this.state.activeSlug);
+        }
+
+        container.innerHTML = `
+                  <div class="flex flex-col md:flex-row gap-12 w-full min-h-[800px]">
+                      <article class="w-full md:w-2/3 md:pr-8 md:border-r md:border-[var(--border-primary)]">
+                          ${this.renderActiveBlog(blogs)}
+                      </article>
+                      <div class="hidden md:block w-full md:w-1/3 flex-shrink-0 md:pl-4">
+                          <h3 class="font-mono text-[10px] text-[var(--text-secondary)] mb-8 uppercase tracking-[0.2em]">Protocol Archive</h3>
+                          <ul class="space-y-2 list-none p-0 m-0">
+                              ${blogs.map(b => `
+                                  <li>
+                                      <button onclick="app.router('journal', '${b.slug}')"
+                                              class="w-full text-left block p-4 ${b.slug === this.state.activeSlug ? 'bg-[var(--sidebar-active)] border-r-4 border-[var(--accent)]' : 'hover:bg-[var(--sidebar-hover)]'} transition-all border-none cursor-pointer">
+                                          <span class="text-sm font-medium block mb-1 uppercase tracking-tight text-[var(--text-primary)]">${b.title}</span>
+                                          <span class="text-[10px] font-mono text-[var(--text-secondary)] uppercase tracking-widest">${b.date}</span>
+                                      </button>
+                                  </li>
+                              `).join('')}
+                          </ul>
+                      </div>
+                  </div>
+              `;
+        // Initialize charts if present
+        setTimeout(() => {
+          this.initBlogCharts();
+          // Trigger Prism syntax highlighting on dynamically loaded content
+          if (typeof Prism !== 'undefined') {
+            Prism.highlightAll();
+          }
+        }, 100);
+      },
+
+      renderActiveBlog: function (blogs) {
+        const allBlogs = blogs || this.getEntries('blog');
+        const b = allBlogs.find(x => x.slug === this.state.activeSlug);
+        if (!b) return '<p class="font-mono text-[var(--text-secondary)]">NO_PROTOCOL_SELECTED</p>';
+        return `
+                  <header class="mb-12 border-b border-[var(--border-primary)] pb-10">
+                      <!-- Mobile Archive Dropdown -->
+                      <div class="md:hidden mb-6">
+                          <details class="group border border-[var(--border-primary)] bg-[var(--bg-secondary)]">
+                              <summary class="flex items-center justify-between p-4 cursor-pointer focus:outline-none list-none">
+                                  <div class="flex items-center">
+                                      <div class="mr-3 text-[var(--text-secondary)] transition-transform duration-200 group-open:rotate-90">
+                                          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                                      </div>
+                                      <span class="text-xs font-mono text-[var(--text-secondary)] uppercase tracking-widest">Browse Archive</span>
+                                  </div>
+                                  <span class="text-[10px] font-mono text-[var(--accent)] uppercase tracking-wider">${allBlogs.length} posts</span>
+                              </summary>
+                              <ul class="divide-y divide-[var(--border-primary)] list-none p-0 m-0 max-h-64 overflow-y-auto">
+                                  ${allBlogs.map(blog => `
+                                      <li>
+                                          <button onclick="app.router('journal', '${blog.slug}')" 
+                                                  class="flex items-center justify-between w-full p-4 ${blog.slug === this.state.activeSlug ? 'bg-[var(--sidebar-active)] border-l-4 border-[var(--accent)]' : 'hover:bg-[var(--sidebar-hover)]'} transition-all border-none cursor-pointer text-left">
+                                              <span class="text-sm font-medium ${blog.slug === this.state.activeSlug ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'} uppercase tracking-tight truncate mr-4">${blog.title}</span>
+                                              <span class="text-[10px] font-mono text-[var(--text-secondary)] uppercase tracking-widest flex-shrink-0">${blog.date}</span>
+                                          </button>
+                                      </li>
+                                  `).join('')}
+                              </ul>
+                          </details>
+                      </div>
+
+                      <div class="flex items-center gap-4 mb-6">
+                          <span class="bg-[var(--accent)] text-[var(--accent-contrast)] text-[9px] font-mono px-2 py-1 uppercase tracking-widest font-bold">Thought Logged</span>
+                          <span class="text-xs font-mono text-[var(--text-secondary)] uppercase tracking-widest">${b.date}</span>
+                      </div>
+                      <h1 class="text-4xl md:text-5xl font-semibold tracking-tighter leading-none mb-6 uppercase text-[var(--text-primary)]">${b.title}</h1>
+                  </header>
+      <div class="prose max-w-none">${this.parseContent(b.content)}</div>
+              `;
+      },
+
+      initBlogCharts: function () {
+        // Universal approach: Re-execute all inline <script> tags in the article content
+        // This works for any chart with any unique ID
+
+        setTimeout(() => {
+          // Find the active article container
+          const article = document.querySelector('article') || document.getElementById('active-article');
+          if (!article) return;
+
+          // Destroy existing Chart.js instances in the article before re-initializing
+          const articleCanvases = article.querySelectorAll('canvas');
+          articleCanvases.forEach(canvas => {
+            if (typeof Chart !== 'undefined' && Chart.getChart) {
+              const existingChart = Chart.getChart(canvas);
+              if (existingChart) {
+                existingChart.destroy();
+              }
+            }
+          });
+
+          const articleScripts = article.querySelectorAll('script');
+
+          articleScripts.forEach(scriptTag => {
+            try {
+              const newScript = document.createElement('script');
+              newScript.textContent = scriptTag.textContent;
+              document.body.appendChild(newScript);
+              document.body.removeChild(newScript); // Clean up
+            } catch (e) {
+              console.warn('Chart script execution error:', e);
+            }
+          });
+
+          // Trigger Prism syntax highlighting on dynamically loaded content
+          if (typeof Prism !== 'undefined') {
+            Prism.highlightAll();
+          }
+        }, 100); // Small delay to ensure DOM is ready for script execution
+      },
+
+      renderResume: function (container) {
+        const experience = this.getEntries('resume');
+        container.innerHTML = `
+                  <div class="space-y-24">
+                      <header class="flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-[var(--accent)] pb-8 gap-6">
+                          <div>
+                              <p class="font-mono text-xs text-[var(--text-secondary)] mb-4 uppercase tracking-[0.2em]">Experience_Log</p>
+                              <h2 class="text-5xl font-semibold tracking-tighter text-[var(--text-primary)] uppercase leading-none">System History</h2>
+                          </div>
+                          <a href="/static/resume.pdf" target="_blank" class="btn-primary">Export_PDF</a>
+                      </header>
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-16 text-sm text-[var(--text-muted)]">
+                          ${experience.map(e => `
+                              <div class="border-l-4 border-[var(--border-primary)] pl-8 relative">
+                                  <div class="absolute w-3 h-3 bg-[var(--border-primary)] -left-[8px] top-0"></div>
+                                  <h3 class="text-2xl font-bold uppercase tracking-tight text-[var(--text-primary)] mb-2">${e.title}</h3>
+                                  <p class="font-mono text-[10px] text-[var(--text-secondary)] uppercase mb-4">${e.date}</p>
+                                  <div class="prose prose-sm dark:prose-invert text-[var(--text-muted)]">${this.parseContent(e.content)}</div>
+                              </div>
+                          `).join('')}
+                      </div>
+                  </div>
+              `;
+      },
+
+      renderContact: function (container) {
+        container.innerHTML = `
+                  <div class="max-w-xl mx-auto text-center py-20">
+                      <h2 class="text-5xl font-semibold tracking-tighter mb-6 uppercase text-[var(--text-primary)]">Let's build simple.</h2>
+                      <form action="https://formspree.io/f/xgvgjbqv" method="POST" class="text-left bg-[var(--bg-secondary)] p-12 border border-[var(--border-primary)] shadow-sm space-y-8">
+                          <input type="text" name="name" class="w-full border-b border-[var(--border-primary)] py-3 focus:outline-none bg-transparent text-[var(--text-primary)]" placeholder="Your Name" required/>
+                          <input type="email" name="email" class="w-full border-b border-[var(--border-primary)] py-3 focus:outline-none bg-transparent text-[var(--text-primary)]" placeholder="your@email.com" required/>
+                          <textarea name="message" rows="4" class="w-full border-b border-[var(--border-primary)] py-3 focus:outline-none resize-none bg-transparent text-[var(--text-primary)]" placeholder="Protocol Transmission..." required></textarea>
+                          <button type="submit" class="w-full btn-primary py-5 font-bold tracking-[0.3em]">SEND_TRANSMISSION</button>
+                      </form>
+                  </div>
+              `;
+      },
+
+      updateTitle: function () {
+        let title = "My Site";
+        let entry = null;
+
+        if (this.state.view === 'journal' && this.state.activeSlug) {
+          entry = this.getEntries('blog').find(b => b.slug === this.state.activeSlug);
+        } else if (this.state.view === 'journal') {
+          entry = this.getEntries('journal_home')[0] || { title: "Journal" };
+          // Fallback to searching basic admin type if needed? No, separate type created.
+          if (!entry.id) {
+            // Fallback check if specific ID 51 is present but maybe under 'home' or 'admin'?
+            // Logic from step 6593 showed id 51 is 'journal_home'
+            entry = dbData.find(e => e.id === 51);
+          }
+        } else if (this.state.view === 'home') {
+          entry = this.getEntries('home')[0];
+        } else if (this.state.view === 'resume') {
+          entry = this.getEntries('resume').find(e => e.id === 44) || this.getEntries('resume')[0];
+        } else if (this.state.view === 'contact') {
+          entry = this.getEntries('contact')[0];
+        }
+
+        if (entry && entry.metadata) {
+          try {
+            const meta = JSON.parse(entry.metadata);
+            if (meta.title) title = meta.title;
+          } catch (e) {
+            // If parse fails, fallback to entry.title
+            if (entry.title) title = entry.title;
+          }
+        } else if (entry && entry.title) {
+          title = entry.title;
+        }
+
+        document.title = title;
+      }
+    };
+
+    window.onpopstate = (e) => app.handlePopState(e);
+
+    window.onload = () => {
+      // Sync button text
+      const current = localStorage.getItem('theme') || 'dark';
+      setTheme(current);
+
+      // Replace initial state so back button works correctly
+      history.replaceState({ view: app.state.view, slug: app.state.activeSlug }, '', window.location.pathname);
+      app.render();
+      app._initialized = true; // Prevent double render from setTheme
+      app.updateNav();
+      app.handleHash();
+      window.addEventListener('hashchange', () => app.handleHash());
+
+      // Initialize scripts/canvas for server-rendered journal pages
+      // Check if active-article exists (server-rendered journal page)
+      setTimeout(() => {
+        const activeArticle = document.getElementById('active-article');
+        if (activeArticle) {
+          // Destroy existing Chart.js instances before re-initializing
+          const articleCanvases = activeArticle.querySelectorAll('canvas');
+          articleCanvases.forEach(canvas => {
+            if (typeof Chart !== 'undefined' && Chart.getChart) {
+              const existingChart = Chart.getChart(canvas);
+              if (existingChart) {
+                existingChart.destroy();
+              }
+            }
+          });
+
+          // Re-execute all inline script tags in the article content
+          const articleScripts = activeArticle.querySelectorAll('script');
+          articleScripts.forEach(scriptTag => {
+            try {
+              const newScript = document.createElement('script');
+              newScript.textContent = scriptTag.textContent;
+              document.body.appendChild(newScript);
+              document.body.removeChild(newScript); // Clean up
+            } catch (e) {
+              console.warn('Article script execution error:', e);
+            }
+          });
+
+          // Trigger Prism syntax highlighting
+          if (typeof Prism !== 'undefined') {
+            Prism.highlightAll();
+          }
+        }
+      }, 100);
+
+      // Re-highlight Prism code blocks when theme changes
+      document.addEventListener('themeChanged', () => {
+        if (typeof Prism !== 'undefined') {
+          Prism.highlightAll();
+        }
+      });
+    };
+  </script>
+</body>
+
+</html>

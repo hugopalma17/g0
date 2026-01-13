@@ -1,0 +1,12 @@
+{{define "content"}}
+    {{if .Content}}
+        {{.Content}}
+    {{else}}
+        <!-- Fallback or Empty State if DB content is missing -->
+        <div class="prose max-w-none text-center py-20">
+            <p>Content is currently being updated...</p>
+        </div>
+    {{end}}
+</div>
+{{end}}
+
