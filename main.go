@@ -27,7 +27,6 @@ import (
 	"github.com/gomarkdown/markdown"
 	"github.com/gorilla/sessions"
 	"github.com/gorilla/websocket"
-	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"golang.org/x/oauth2"
 	"gopkg.in/yaml.v3"
@@ -95,19 +94,24 @@ var config Config
 var embeddedFiles embed.FS
 
 var (
-	staticFS     fs.FS
-	db           *sql.DB
-	store        *sessions.CookieStore
-	oauthConfig  *oauth2.Config
-	oidcProvider *oidc.Provider
-	verifier     *oidc.IDTokenVerifier
+	coreStaticFS  fs.FS // Admin assets: /static/ (xterm, monaco, admin.js, etc.)
+	themeStaticFS fs.FS // Theme assets: /templates/default/static/ (css, js, images)
+	db            *sql.DB
+	store         *sessions.CookieStore
+	oauthConfig   *oauth2.Config
+	oidcProvider  *oidc.Provider
+	verifier      *oidc.IDTokenVerifier
 )
 
 func init() {
 	var err error
-	staticFS, err = fs.Sub(embeddedFiles, "static")
+	coreStaticFS, err = fs.Sub(embeddedFiles, "static")
 	if err != nil {
-		log.Fatalf("Failed to create static sub-filesystem: %v", err)
+		log.Fatalf("Failed to create core static sub-filesystem: %v", err)
+	}
+	themeStaticFS, err = fs.Sub(embeddedFiles, "templates/default/static")
+	if err != nil {
+		log.Fatalf("Failed to create theme static sub-filesystem: %v", err)
 	}
 }
 
@@ -844,7 +848,7 @@ func stripHTML(content string, limit int) string {
 }
 
 func getFallbackContent(contentType string) string {
-	filename := fmt.Sprintf("templates/%s.html", contentType)
+	filename := fmt.Sprintf("templates/default/%s.html", contentType)
 	content, err := embeddedFiles.ReadFile(filename)
 	if err != nil {
 		return ""
@@ -936,7 +940,6 @@ func getPlaceholder(key, fallback string) string {
 // ============================================================================
 
 func main() {
-	godotenv.Load()
 
 	// Setup logging
 	logPath := "/app/server.log"
@@ -957,9 +960,17 @@ func main() {
 		http.HandleFunc("/", setupWizardHandler)
 		http.HandleFunc("/setup/complete", completeSetupHandler)
 
-		// Serve static files for setup page
-		staticHandler := http.FileServer(http.FS(staticFS))
-		http.Handle("/static/", http.StripPrefix("/static/", staticHandler))
+		// Serve static files for setup page (theme first, then core)
+		http.HandleFunc("/static/", func(w http.ResponseWriter, r *http.Request) {
+			cleanPath := strings.TrimPrefix(r.URL.Path, "/static/")
+			// Try theme static first
+			if _, err := themeStaticFS.Open(cleanPath); err == nil {
+				http.StripPrefix("/static/", http.FileServer(http.FS(themeStaticFS))).ServeHTTP(w, r)
+				return
+			}
+			// Fall back to core static
+			http.StripPrefix("/static/", http.FileServer(http.FS(coreStaticFS))).ServeHTTP(w, r)
+		})
 
 		port := os.Getenv("PORT")
 		if port == "" {
@@ -986,8 +997,9 @@ func main() {
 	// ROUTES
 	// ========================================================================
 
-	// Static files
-	staticHandler := http.StripPrefix("/static/", http.FileServer(http.FS(staticFS)))
+	// Static files - merged from theme and core
+	// Theme assets: templates/default/static/ (css, js for frontend, images)
+	// Core assets: static/ (admin.js, monaco, xterm, etc.)
 	http.HandleFunc("/static/", func(w http.ResponseWriter, r *http.Request) {
 		cleanPath := strings.TrimPrefix(r.URL.Path, "/static/")
 		if cleanPath == "" || strings.HasSuffix(cleanPath, "/") {
@@ -995,13 +1007,19 @@ func main() {
 			return
 		}
 
-		if _, err := staticFS.Open(cleanPath); err != nil {
+		// Determine which filesystem has the file
+		var targetFS fs.FS
+		if _, err := themeStaticFS.Open(cleanPath); err == nil {
+			targetFS = themeStaticFS
+		} else if _, err := coreStaticFS.Open(cleanPath); err == nil {
+			targetFS = coreStaticFS
+		} else {
 			http.NotFound(w, r)
 			return
 		}
 
-		// Protect admin JS
-		if cleanPath == "js/admin.js" || cleanPath == "js/custom-editor.js" {
+		// Protect admin assets (JS and Monaco editor) - these are in coreStaticFS
+		if cleanPath == "js/admin.js" || strings.HasPrefix(cleanPath, "js/vs/") {
 			session, _ := store.Get(r, "auth-session")
 			if auth, ok := session.Values["authenticated"].(bool); !ok || !auth {
 				http.NotFound(w, r)
@@ -1009,7 +1027,7 @@ func main() {
 			}
 		}
 
-		staticHandler.ServeHTTP(w, r)
+		http.StripPrefix("/static/", http.FileServer(http.FS(targetFS))).ServeHTTP(w, r)
 	})
 
 	// Auth routes
@@ -1348,6 +1366,275 @@ func main() {
 		w.Write([]byte("PROTOCOL_UPDATED"))
 	}))
 
+	// Add new row to table
+	http.HandleFunc("/api/db/insert", withAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		table := r.FormValue("table")
+		validTables := map[string]bool{"content": true}
+		if !validTables[table] {
+			http.Error(w, "Invalid Table", http.StatusBadRequest)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		var err error
+		var result sql.Result
+		if config.Database.Driver == "postgres" {
+			result, err = db.ExecContext(ctx, "INSERT INTO content (type, title, date, content, metadata) VALUES ($1, $2, $3, $4, $5)",
+				"blog", "New Entry", time.Now().Format("Jan 02, 2006"), "", "")
+		} else {
+			result, err = db.ExecContext(ctx, "INSERT INTO content (type, title, date, content, metadata) VALUES (?, ?, ?, ?, ?)",
+				"blog", "New Entry", time.Now().Format("Jan 02, 2006"), "", "")
+		}
+
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		id, _ := result.LastInsertId()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"id": id, "status": "ok"})
+	}))
+
+	// Delete row from table
+	http.HandleFunc("/api/db/delete-row", withAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		table := r.FormValue("table")
+		id := r.FormValue("id")
+
+		validTables := map[string]bool{"content": true}
+		if !validTables[table] {
+			http.Error(w, "Invalid Table", http.StatusBadRequest)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		var err error
+		if config.Database.Driver == "postgres" {
+			_, err = db.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE id = $1", table), id)
+		} else {
+			_, err = db.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE id = ?", table), id)
+		}
+
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Write([]byte(`{"status": "ok"}`))
+	}))
+
+	// Add column to table
+	http.HandleFunc("/api/db/add-column", withAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		table := r.FormValue("table")
+		colName := r.FormValue("column")
+		colType := r.FormValue("type")
+
+		validTables := map[string]bool{"content": true}
+		if !validTables[table] {
+			http.Error(w, "Invalid Table", http.StatusBadRequest)
+			return
+		}
+
+		// Validate column name (alphanumeric and underscore only)
+		isAlphaNum := regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]*$`).MatchString
+		if !isAlphaNum(colName) {
+			http.Error(w, "Invalid column name (use letters, numbers, underscore; must start with letter)", http.StatusBadRequest)
+			return
+		}
+
+		// Map simple types to SQL types
+		sqlType := "TEXT"
+		switch strings.ToLower(colType) {
+		case "text", "string":
+			sqlType = "TEXT"
+		case "int", "integer", "number":
+			if config.Database.Driver == "postgres" {
+				sqlType = "INTEGER"
+			} else {
+				sqlType = "INTEGER"
+			}
+		case "bool", "boolean":
+			if config.Database.Driver == "postgres" {
+				sqlType = "BOOLEAN"
+			} else {
+				sqlType = "INTEGER" // SQLite uses 0/1 for bool
+			}
+		case "date", "datetime":
+			sqlType = "TEXT" // Store as ISO string for compatibility
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		query := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, colName, sqlType)
+		_, err := db.ExecContext(ctx, query)
+
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Write([]byte(`{"status": "ok"}`))
+	}))
+
+	// Get table schema (columns info)
+	http.HandleFunc("/api/db/schema/", withAuth(func(w http.ResponseWriter, r *http.Request) {
+		tableName := strings.TrimPrefix(r.URL.Path, "/api/db/schema/")
+		validTables := map[string]bool{"content": true}
+		if !validTables[tableName] {
+			http.Error(w, "Invalid Table", http.StatusBadRequest)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		var rows *sql.Rows
+		var err error
+
+		if config.Database.Driver == "postgres" {
+			rows, err = db.QueryContext(ctx, `
+				SELECT column_name, data_type, is_nullable
+				FROM information_schema.columns
+				WHERE table_name = $1
+				ORDER BY ordinal_position`, tableName)
+		} else {
+			rows, err = db.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", tableName))
+		}
+
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var columns []map[string]interface{}
+
+		if config.Database.Driver == "postgres" {
+			for rows.Next() {
+				var name, dataType, nullable string
+				if err := rows.Scan(&name, &dataType, &nullable); err == nil {
+					columns = append(columns, map[string]interface{}{
+						"name":     name,
+						"type":     dataType,
+						"nullable": nullable == "YES",
+					})
+				}
+			}
+		} else {
+			for rows.Next() {
+				var cid int
+				var name, dataType string
+				var notNull, dfltValue, pk interface{}
+				if err := rows.Scan(&cid, &name, &dataType, &notNull, &dfltValue, &pk); err == nil {
+					columns = append(columns, map[string]interface{}{
+						"name":     name,
+						"type":     dataType,
+						"nullable": notNull == int64(0),
+					})
+				}
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(columns)
+	}))
+
+	// Execute raw SQL (for power users)
+	http.HandleFunc("/api/db/exec", withAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		query := r.FormValue("query")
+		if query == "" {
+			http.Error(w, "Query required", http.StatusBadRequest)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+
+		// Determine if it's a SELECT query
+		trimmedQuery := strings.TrimSpace(strings.ToUpper(query))
+		isSelect := strings.HasPrefix(trimmedQuery, "SELECT") || strings.HasPrefix(trimmedQuery, "PRAGMA")
+
+		if isSelect {
+			rows, err := db.QueryContext(ctx, query)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			defer rows.Close()
+
+			cols, _ := rows.Columns()
+			var result []map[string]interface{}
+
+			for rows.Next() {
+				columns := make([]interface{}, len(cols))
+				columnPointers := make([]interface{}, len(cols))
+				for i := range columns {
+					columnPointers[i] = &columns[i]
+				}
+
+				if err := rows.Scan(columnPointers...); err != nil {
+					continue
+				}
+
+				m := make(map[string]interface{})
+				for i, colName := range cols {
+					val := columns[i]
+					if b, ok := val.([]byte); ok {
+						m[colName] = string(b)
+					} else {
+						m[colName] = val
+					}
+				}
+				result = append(result, m)
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"type": "select",
+				"rows": result,
+				"cols": cols,
+			})
+		} else {
+			result, err := db.ExecContext(ctx, query)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			affected, _ := result.RowsAffected()
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"type":         "exec",
+				"rowsAffected": affected,
+			})
+		}
+	}))
+
 	// Admin panel
 	type AdminData struct {
 		Title       string
@@ -1425,7 +1712,7 @@ func main() {
 	// 404 renderer
 	render404 := func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		tmpl, err := template.ParseFS(embeddedFiles, "templates/404.html")
+		tmpl, err := template.ParseFS(embeddedFiles, "templates/default/404.html")
 		if err != nil {
 			http.Error(w, "Page Not Found", http.StatusNotFound)
 			return
@@ -1472,7 +1759,7 @@ func main() {
 		}
 
 		tmpl := template.New("index.html")
-		tmpl, err = tmpl.ParseFS(embeddedFiles, "templates/index.html", "templates/journal.html")
+		tmpl, err = tmpl.ParseFS(embeddedFiles, "templates/default/index.html", "templates/default/journal.html")
 		if err != nil {
 			http.Error(w, "Template Parse Error", http.StatusInternalServerError)
 			return
@@ -1583,11 +1870,11 @@ func main() {
 		var seoMeta SEOMetadata
 		pageTitle := config.Site.Name + " | " + config.Site.Tagline
 		var matchedEntry *ContentEntry
-		targetTemplate := "templates/home.html"
+		targetTemplate := "templates/default/home.html"
 
 		switch view {
 		case "home":
-			targetTemplate = "templates/home.html"
+			targetTemplate = "templates/default/home.html"
 			for i := range entries {
 				if entries[i].Type == "home" {
 					matchedEntry = &entries[i]
@@ -1595,7 +1882,7 @@ func main() {
 				}
 			}
 		case "resume":
-			targetTemplate = "templates/resume.html"
+			targetTemplate = "templates/default/resume.html"
 			for i := range entries {
 				if entries[i].Type == "resume" {
 					matchedEntry = &entries[i]
@@ -1603,7 +1890,7 @@ func main() {
 				}
 			}
 		case "contact":
-			targetTemplate = "templates/contact.html"
+			targetTemplate = "templates/default/contact.html"
 			for i := range entries {
 				if entries[i].Type == "contact" {
 					matchedEntry = &entries[i]
@@ -1668,9 +1955,9 @@ func main() {
 		}
 
 		tmpl := template.New("index.html")
-		tmpl, err = tmpl.ParseFS(embeddedFiles, "templates/index.html", targetTemplate)
+		tmpl, err = tmpl.ParseFS(embeddedFiles, "templates/default/index.html", targetTemplate)
 		if err != nil {
-			tmpl, _ = tmpl.ParseFS(embeddedFiles, "templates/index.html", "templates/home.html")
+			tmpl, _ = tmpl.ParseFS(embeddedFiles, "templates/default/index.html", "templates/default/home.html")
 		}
 
 		w.Header().Set("Content-Type", "text/html")
