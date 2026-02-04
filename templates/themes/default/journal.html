@@ -1,0 +1,38 @@
+{{define "content"}}
+<div class="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-10 flex flex-col md:flex-row gap-6 md:gap-12 w-full min-h-[600px]">
+  <article id="active-article" class="w-full md:w-2/3 md:pr-8 md:border-r md:border-[var(--border-primary)]">
+    {{if .ActiveBlog}}
+    <header class="mb-10 border-b border-[var(--border-primary)] pb-8">
+      <div class="flex items-center gap-4 mb-4">
+        <span class="text-xs font-mono text-[var(--text-secondary)] uppercase tracking-widest">{{.ActiveBlog.Date}}</span>
+      </div>
+      <h1 class="text-4xl md:text-5xl font-semibold tracking-tighter leading-none text-[var(--text-primary)]">
+        {{.ActiveBlog.Title}}
+      </h1>
+    </header>
+
+    <div class="prose max-w-none">
+      {{.ActiveBlogContent}}
+    </div>
+    {{else}}
+    <p class="font-mono text-[var(--text-secondary)]">No posts found.</p>
+    {{end}}
+  </article>
+
+  <aside class="w-full md:w-1/3 flex-shrink-0 md:pl-4">
+    <h3 class="font-mono text-[10px] text-[var(--text-secondary)] mb-6 uppercase tracking-[0.2em]">Journal Archive</h3>
+    <ul class="space-y-2 list-none p-0 m-0">
+      {{range .Blogs}}
+      <li>
+        <a href="/journal/{{.Slug}}"
+          class="w-full text-left block p-3 {{if eq $.ActiveSlug .Slug}}bg-[var(--sidebar-active)] border-l-4 border-[var(--accent)]{{else}}hover:bg-[var(--sidebar-hover)]{{end}} transition-all group no-underline border-none cursor-pointer">
+          <span
+            class="text-sm font-medium {{if eq $.ActiveSlug .Slug}}text-[var(--text-primary)]{{else}}text-[var(--text-muted)]{{end}} block mb-1 tracking-tight">{{.Title}}</span>
+          <span class="text-[10px] font-mono text-[var(--text-secondary)] uppercase tracking-widest">{{.Date}}</span>
+        </a>
+      </li>
+      {{end}}
+    </ul>
+  </aside>
+</div>
+{{end}}

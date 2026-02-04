@@ -1,4 +1,5 @@
 # Binary
+
 g0
 antigravity
 
@@ -16,6 +17,9 @@ data/
 .DS_Store
 Thumbs.db
 
+# Local tooling
+.claude/
+
 # IDE
 .idea/
 .vscode/
@@ -24,3 +28,4 @@ Thumbs.db
 
 # Logs
 *.log
+*G0_CMS.md

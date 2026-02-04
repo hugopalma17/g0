@@ -1,0 +1,37 @@
+{{define "content"}}
+<section class="max-w-4xl">
+  {{if .Content}}
+  <div class="prose max-w-none">
+    {{.Content}}
+  </div>
+  {{else}}
+  <div class="prose max-w-none">
+    <h2>Contact</h2>
+    <p>This is a starter contact form. Replace the form action with your own endpoint or embed a custom form.</p>
+  </div>
+
+  <form action="https://formspree.io/f/yourid" method="POST"
+    class="mt-10 text-left bg-[var(--bg-secondary)] p-8 border border-[var(--border-primary)] space-y-6">
+    <div>
+      <label class="block font-mono text-[10px] uppercase text-[var(--text-secondary)] mb-2 tracking-[0.2em]">Name</label>
+      <input type="text" name="name"
+        class="w-full border-b border-[var(--border-primary)] py-3 focus:outline-none bg-transparent text-[var(--text-primary)]"
+        placeholder="Your Name" required />
+    </div>
+    <div>
+      <label class="block font-mono text-[10px] uppercase text-[var(--text-secondary)] mb-2 tracking-[0.2em]">Email</label>
+      <input type="email" name="email"
+        class="w-full border-b border-[var(--border-primary)] py-3 focus:outline-none bg-transparent text-[var(--text-primary)]"
+        placeholder="you@email.com" required />
+    </div>
+    <div>
+      <label class="block font-mono text-[10px] uppercase text-[var(--text-secondary)] mb-2 tracking-[0.2em]">Message</label>
+      <textarea name="message" rows="4"
+        class="w-full border-b border-[var(--border-primary)] py-3 focus:outline-none resize-none bg-transparent text-[var(--text-primary)]"
+        placeholder="How can I help?" required></textarea>
+    </div>
+    <button type="submit" class="btn-primary">Send Message</button>
+  </form>
+  {{end}}
+</section>
+{{end}}

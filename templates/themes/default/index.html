@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{if .Title}}{{.Title}}{{else}}{{.Site.Name}}{{end}}</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+
+  {{if .SeoDesc}}
+  <meta name="description" content="{{.SeoDesc}}" />
+  {{else if .Site.Description}}
+  <meta name="description" content="{{.Site.Description}}" />
+  {{end}}
+
+  <meta property="og:title" content="{{if .Title}}{{.Title}}{{else}}{{.Site.Name}}{{end}}" />
+  <meta property="og:description" content="{{if .SeoDesc}}{{.SeoDesc}}{{else}}{{.Site.Description}}{{end}}" />
+  {{if .SeoImage}}
+  <meta property="og:image" content="{{.SeoImage}}" />
+  {{end}}
+
+  <link href="/static/css/output.css" rel="stylesheet" />
+  <link href="/static/css/fonts.css" rel="stylesheet" />
+  <link href="/static/css/theme.css?v=2" rel="stylesheet" />
+  <link href="/static/css/prism.css" rel="stylesheet" />
+  <script src="/static/js/htmx.min.js"></script>
+  <script src="/static/js/chart.min.js"></script>
+  <script src="/static/js/prism.js"></script>
+  <!-- Analytics placeholder - add your own tracking script here -->
+
+  <style>
+    body {
+      font-family: "Inter", sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+    }
+
+    .font-mono {
+      font-family: "JetBrains Mono", monospace;
+    }
+
+    .active-nav {
+      border-bottom: 2px solid var(--accent);
+      font-weight: 500;
+      color: var(--text-primary) !important;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--accent-contrast);
+      padding: 0.75rem 1.5rem;
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border: 1px solid var(--accent);
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .btn-primary:hover {
+      background: transparent;
+      color: var(--accent);
+    }
+
+    #theme-toggle {
+      background: transparent;
+      border: 1px solid var(--border-primary);
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 4px 8px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      transition: all 0.2s;
+    }
+
+    #theme-toggle:hover {
+      border-color: var(--accent);
+      color: var(--text-primary);
+    }
+  </style>
+
+  <script>
+    function setTheme(theme) {
+      document.documentElement.setAttribute("data-theme", theme);
+      localStorage.setItem("theme", theme);
+      document.cookie = `theme=${theme}; path=/; max-age=31536000`;
+    }
+
+    function toggleTheme() {
+      const current =
+        document.documentElement.getAttribute("data-theme") || "dark";
+      setTheme(current === "light" ? "dark" : "light");
+    }
+
+    const serverTheme = "{{.Theme}}";
+    const savedTheme = localStorage.getItem("theme");
+    setTheme(serverTheme || savedTheme || "dark");
+  </script>
+</head>
+
+<body class="border-t-4 border-[var(--accent)]">
+  {{ $view := .View }}
+  <header
+    class="w-full max-w-6xl mx-auto px-6 py-10 flex flex-col md:flex-row justify-between items-start md:items-end border-b border-[var(--border-primary)]">
+    <div>
+      <a href="/" class="no-underline text-[var(--text-primary)]">
+        <h1 class="text-2xl font-semibold tracking-tight">
+          {{if .Site.Name}}{{.Site.Name}}{{else}}G0 CMS{{end}}
+        </h1>
+      </a>
+      {{if .Site.Tagline}}
+      <p class="text-sm text-[var(--text-secondary)] mt-1">{{.Site.Tagline}}</p>
+      {{end}}
+    </div>
+
+    <nav class="mt-6 md:mt-0">
+      <ul
+        class="flex items-center space-x-6 text-xs uppercase tracking-widest font-mono text-[var(--text-secondary)] list-none p-0 m-0">
+        <li>
+          <a href="/"
+            class="hover:text-[var(--text-primary)] pb-1 transition-colors font-mono uppercase no-underline {{if or (eq $view "home") (eq $view "")}active-nav{{end}}">Home</a>
+        </li>
+        <li>
+          <a href="/journal"
+            class="hover:text-[var(--text-primary)] pb-1 transition-colors font-mono uppercase no-underline {{if eq $view "journal"}}active-nav{{end}}">Journal</a>
+        </li>
+        <li>
+          <a href="/resume"
+            class="hover:text-[var(--text-primary)] pb-1 transition-colors font-mono uppercase no-underline {{if eq $view "resume"}}active-nav{{end}}">Resume</a>
+        </li>
+        <li>
+          <a href="/contact"
+            class="hover:text-[var(--text-primary)] pb-1 transition-colors font-mono uppercase no-underline {{if eq $view "contact"}}active-nav{{end}}">Contact</a>
+        </li>
+        <li class="pl-4 border-l border-[var(--border-primary)]">
+          <button id="theme-toggle" onclick="toggleTheme()">Theme</button>
+        </li>
+      </ul>
+    </nav>
+  </header>
+
+  <main class="w-full max-w-6xl mx-auto px-6 py-10">
+    {{block "content" .}}{{end}}
+  </main>
+
+  <footer class="w-full max-w-6xl mx-auto px-6 py-10 border-t border-[var(--border-primary)]">
+    <div class="flex flex-col items-start gap-2 text-[11px] font-mono text-[var(--text-secondary)] uppercase tracking-[0.2em]">
+      <p>
+        &copy; {{.Year}} {{if .Site.Author}}{{.Site.Author}}{{else}}{{.Site.Name}}{{end}}. Built with G0 CMS.
+      </p>
+      {{if .AdminPath}}
+      <a href="{{.AdminPath}}"
+        class="hover:text-[var(--text-primary)] transition-colors no-underline border border-[var(--border-primary)] px-2 py-1 rounded">Admin</a>
+      {{end}}
+    </div>
+  </footer>
+</body>
+
+</html>

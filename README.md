@@ -36,7 +36,7 @@ G0 rejects this. **One binary. One config file. One database. Done.**
 
 ```bash
 git clone https://github.com/hugopalma17/g0
-cd g0-cms
+cd g0
 go build -o g0 .
 ./g0
 ```
@@ -90,7 +90,7 @@ When you run G0 for the first time, enter:
 - **Client ID**: `xxxx.apps.googleusercontent.com`
 - **Client Secret**: `GOCSPX-xxxx`
 
-> ⚠️ **Important**: Your redirect URI in Google Console must exactly match your site URL + `/api/auth/callback`
+> **Important**: Your redirect URI in Google Console must exactly match your site URL + `/api/auth/callback`
 
 ### Publishing Your App (Optional)
 
@@ -131,8 +131,10 @@ auth:
   provider: "google"
   client_id: "xxx.apps.googleusercontent.com"
   client_secret: "xxx"
+  redirect_url: "https://example.com/api/auth/callback"
   allowed_emails:
     - "admin@example.com"
+  session_key: ""    # Auto-generated if empty
 
 server:
   host: "0.0.0.0"
@@ -169,9 +171,8 @@ Access your admin panel (default `/admin`, customizable in setup) to:
 |------|---------|
 | `blog` | Journal/blog entries |
 | `home` | Homepage content |
-| `resume` | Resume/CV page |
+| `resume` | Resume page |
 | `contact` | Contact page content |
-| `breakdown` | Project case studies |
 
 ## Deployment
 
@@ -202,12 +203,9 @@ WantedBy=multi-user.target
 
 ### Option 3: Docker
 
-```dockerfile
-FROM scratch
-COPY g0 /g0
-COPY config.yaml /config.yaml
-EXPOSE 8080
-CMD ["/g0"]
+```bash
+docker build -t g0 .
+docker run -p 8080:8080 -v $(pwd)/data:/app/data g0
 ```
 
 ### Reverse Proxy (Caddy)
@@ -253,7 +251,13 @@ example.com {
 ## Project Structure
 
 ```
-g0-cms/
+g0/
+├── internal/
+│   ├── auth/         # OAuth + session auth
+│   ├── handlers/     # HTTP routes + handlers
+│   ├── middleware/   # Host/track placeholders
+│   ├── services/     # DB + services
+│   └── utils/        # Helpers
 ├── main.go           # Core server
 ├── config.yaml       # Runtime config (created by wizard)
 ├── go.mod
@@ -264,16 +268,109 @@ g0-cms/
 │   ├── fonts/        # Web fonts
 │   └── images/       # Static images
 ├── templates/
-│   ├── index.html    # Base layout
-│   ├── home.html     # Homepage
-│   ├── journal.html  # Blog template
-│   ├── resume.html   # Resume template
-│   ├── contact.html  # Contact template
-│   ├── admin.html    # Admin panel
-│   └── 404.html      # Error page
+│   ├── admin.html          # Admin panel
+│   └── themes/
+│       └── default/
+│           ├── index.html  # Base layout
+│           ├── home.html   # Homepage
+│           ├── journal.html # Blog template
+│           ├── resume.html # Resume template
+│           ├── contact.html # Contact template
+│           ├── 404.html    # Error page
+│           └── static/     # Theme assets (css, js, images)
 └── data/
     └── g0.db         # SQLite database (runtime)
 ```
+
+## Template Tutorial (Index + Body)
+
+G0 renders every page through `templates/themes/default/index.html`, which defines a `{{block "content" .}}` section. Each page template only needs to define that block.
+
+1. Create a new template, for example `templates/themes/default/about.html`:
+
+```html
+{{define "content"}}
+<section class="max-w-4xl">
+  <div class="prose max-w-none">
+    <h2>About</h2>
+    <p>Write your content here.</p>
+  </div>
+</section>
+{{end}}
+```
+
+1. Add a route in `internal/handlers/routes.go` by copying the `home`/`resume`/`contact` cases and pointing to your new template.
+1. Create content in the admin panel with the matching type (for example `about`).
+
+The base layout, navigation, and footer stay in `index.html`; your page body lives in its own template.
+
+## Custom Page Guide
+
+Use this workflow to add a new page type end-to-end. The base layout lives in `templates/themes/default/index.html`, and each page only provides the `{{define "content"}}` block.
+
+1. Create the page body in `templates/themes/default/<page>.html`:
+
+```html
+{{define "content"}}
+<section class="max-w-4xl">
+  {{if .Content}}
+  <div class="prose max-w-none">
+    {{.Content}}
+  </div>
+  {{else}}
+  <div class="prose max-w-none">
+    <h2>About</h2>
+    <p>Write your content here.</p>
+  </div>
+  {{end}}
+</section>
+{{end}}
+```
+
+1. Register the route in `internal/handlers/routes.go` inside the `switch view` block:
+
+```go
+case "about":
+    targetTemplate = "templates/themes/default/about.html"
+    for i := range entries {
+        if entries[i].Type == "about" {
+            matchedEntry = &entries[i]
+            break
+        }
+    }
+```
+
+1. Create content in the admin panel with `type = about`. That content becomes `{{.Content}}` on the page.
+
+1. If the page should appear in the navigation, add a link in `templates/themes/default/index.html`.
+
+1. If you want SEO tags for this page, add JSON metadata in the admin panel (Metadata field). The layout reads it and fills `{{.SeoDesc}}`, `{{.SeoImage}}`, and `{{.SeoKeywords}}`.
+
+### Template Data You Can Use
+
+- `{{.Content}}` HTML content for the page
+- `{{.Title}}` page title
+- `{{.Site.Name}}`, `{{.Site.Tagline}}`, `{{.Site.Author}}`
+- `{{.SeoDesc}}`, `{{.SeoImage}}`, `{{.SeoKeywords}}`
+- `{{.AdminPath}}`, `{{.Theme}}`, `{{.Year}}`
+
+### SEO Tags (per page)
+
+Add JSON metadata in the admin panel (Metadata field):
+
+```json
+{"title": "About | My Site", "description": "Short summary", "og_image": "/static/images/og-image.jpg", "keywords": "about, company"}
+```
+
+How it works:
+- The JSON above is stored in the database in the `content.metadata` column for that page.
+- On render, the server parses that JSON and maps it to `Title`, `SeoDesc`, `SeoImage`, and `SeoKeywords` for the template.
+- `og:title` uses `metadata.title` if present, otherwise the entry title, otherwise the site name.
+- `og:description` uses `metadata.description` if present, otherwise `site.description` from `config.yaml`.
+- `og:image` uses `metadata.og_image` if present, otherwise `site.url + /static/images/og-image.jpg`. Set `site.url` if you want absolute OG URLs.
+
+Optional auto-generation:
+- If you add a metadata generation script such as `generatemetadate.js`, you must install and configure a provider (Copilot, Gemini, or similar) before running it. This repo does not ship that dependency by default.
 
 ## Security
 

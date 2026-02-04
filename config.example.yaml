@@ -20,10 +20,17 @@ database:
   path: "./data/g0.db"
   
   # PostgreSQL settings (if driver: postgres)
+  # Steps:
+  # 1) Create a database and user (example):
+  #    CREATE DATABASE g0cms;
+  #    CREATE USER g0user WITH PASSWORD 'strong-password';
+  #    GRANT ALL PRIVILEGES ON DATABASE g0cms TO g0user;
+  # 2) Fill the fields below (no quotes required).
+  # 3) Ensure the server allows connections from your host.
   # host: "localhost"
   # port: "5432"
-  # user: "postgres"
-  # password: "your-password"
+  # user: "g0user"
+  # password: "strong-password"
   # dbname: "g0cms"
 
 auth:
